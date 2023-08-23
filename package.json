@@ -1,0 +1,33 @@
+{
+  "name": "imager",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.11.1",
+    "@emotion/styled": "^11.11.0",
+    "@mui/icons-material": "^5.14.3",
+    "@mui/material": "^5.14.5",
+    "@mui/styled-engine-sc": "^5.12.0",
+    "@types/node": "20.5.1",
+    "@types/react": "18.2.20",
+    "@types/react-dom": "18.2.7",
+    "eslint": "8.47.0",
+    "eslint-config-next": "13.4.18",
+    "image-js": "^0.35.4",
+    "image.js": "^0.0.0",
+    "next": "13.4.18",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "react-dropdown": "^1.11.0",
+    "react-dropzone": "^14.2.3",
+    "react-hook-form": "^7.45.4",
+    "styled-components": "^6.0.7",
+    "typescript": "5.1.6"
+  }
+}
