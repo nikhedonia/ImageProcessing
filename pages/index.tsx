@@ -1,13 +1,14 @@
-import {ReactHTMLElement, useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import { useCallback, useMemo, useRef, useState} from 'react';
 import { useDropzone } from 'react-dropzone';
 
-import { GreyAlgorithm, Image } from 'image-js';
-import { Accordion, AccordionDetails, AccordionSummary, Box, Breadcrumbs, Button, ButtonProps, Checkbox, FormControlLabel, InputLabel, MenuItem, Select, Slider, Typography } from '@mui/material';
+import { Image } from 'image-js';
+import { Breadcrumbs, Button, ButtonProps } from '@mui/material';
 
 import AddPhotoAlternateIcon from '@mui/icons-material/AddPhotoAlternate';
 import UndoIcon from '@mui/icons-material/Undo';
 import CommitIcon from '@mui/icons-material/Commit';
 import { ToolBox } from '@/components/processors/ToolBox';
+import { Histogram } from '@/components/Histogram';
 
 type Operation = {
   id: number;
@@ -26,7 +27,7 @@ type ImageEntry = {
   } & Operation
 }
 
-function Crumb({operation, data, ...props}: Partial<Operation & ButtonProps>) {
+function Crumb({operation, data, ...props}: Partial<Operation> & ButtonProps) {
   if(!operation) return null;
   return <Button {...props}>{operation}({JSON.stringify(data||{})})</Button>;
 }
@@ -75,6 +76,7 @@ function ImageProcessor() {
         const replaced = {
           ...images[selected],
           next: {
+            id: selected,
             operation,
             data,
             image
@@ -99,9 +101,17 @@ function ImageProcessor() {
   }, [workingImage, images[selected]?.next])
 
   return (
-    <div style={{display: 'flex', height:'100%', flexDirection: 'column', justifyContent:'stretch', alignItems:'flex-start', maxHeight: '1vh'}}>
+    <div style={{
+      display: 'grid', 
+      height:'100vh',
+      grid: `
+        [r1-start]  "n    n   n"    2em [r1-end]
+        [r2-start]  "l    c   r"    1fr [r1-end]
+                 /  20em 1fr 20em  
+      `
+    }}>
 
-      <div className='topBar' style={{display: 'flex', height: '2rem', gap:'0.1em', alignItems: 'center'}}>
+      <div className='topBar' style={{gridArea:'n', display: 'flex', height: '2rem', gap:'0.1em', alignItems: 'center'}}>
         <Button disabled={!images[selected]?.next}           
           onClick={()=>setImages(images => {
             delete images[selected].next;
@@ -149,21 +159,19 @@ function ImageProcessor() {
         <Breadcrumbs separator=">" sx={{marginLeft:'1em'}}>
           {images[selected]?.chain.length>5 && <span>...</span> }
           {images[selected]?.chain.slice(-5).map( (x, i) => 
+            // @ts-ignore
             <Crumb onClick={()=>{
               setSelected(x.id)
             }} style={{color:'#ccc'}} key={i} {...x} />
           )}
-          <Crumb style={{color:'#333'}} {...images[selected]?.next} />
+          {
+            // @ts-ignore
+            <Crumb style={{color:'#333'}} {...images[selected]?.next} />
+          }
         </Breadcrumbs>
       </div>
       
-
-      <div style={{
-        display:'grid', 
-        gridTemplateColumns: 'minmax(0px, 20em) 1fr minmax(0px, 20em)',
-        gridTemplateRows: '1fr'  
-      }}>
-        <div style={{background:'#eee', overflowY: 'scroll', height: 'calc(100vh - 3rem)'}}>
+        <div style={{gridArea: 'l', background:'#eee', overflowY: 'scroll'}}>
           <input {...getInputProps()} />
 
           <div style={{ width: '15em'}}>
@@ -200,6 +208,7 @@ function ImageProcessor() {
           ref={canvasRef}
           draggable={false}
           style={{
+            gridArea:'c',
             userSelect:'none',
             display: 'flex', 
             padding: '1em',
@@ -248,12 +257,15 @@ function ImageProcessor() {
         }
         
 
-        <div style={{display:'flex', flexDirection:'column', gap: '1em'}}>
-          <h2>Tools</h2>
+      <div style={{gridArea: 'r', display:'flex', flexDirection:'column', gap: '1em', overflowY:'scroll'}}>
+        <h2>Tools</h2>
 
-          <ToolBox key={selected} image={workingImage} onUpdate={(operation, data) => {
-            update(operation, data);
-          }} />
+        <ToolBox key={selected} image={workingImage} onUpdate={(operation, data) => {
+          update(operation, data);
+        }} />
+
+        <div>
+          <Histogram image={workingImage}/>
         </div>
       </div>
 

@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "deploy": "gh-pages -t -d out"
   },
   "dependencies": {
     "@emotion/react": "^11.11.1",
@@ -27,7 +28,12 @@
     "react-dropdown": "^1.11.0",
     "react-dropzone": "^14.2.3",
     "react-hook-form": "^7.45.4",
+    "react-vis": "^1.12.1",
     "styled-components": "^6.0.7",
     "typescript": "5.1.6"
+  },
+  "devDependencies": {
+    "@types/react-vis": "^1.11.11",
+    "gh-pages": "^4.0.0"
   }
 }
