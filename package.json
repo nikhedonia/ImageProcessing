@@ -18,6 +18,7 @@
     "@types/node": "20.5.1",
     "@types/react": "18.2.20",
     "@types/react-dom": "18.2.7",
+    "dedent": "^1.5.1",
     "eslint": "8.47.0",
     "eslint-config-next": "13.4.18",
     "image-js": "^0.35.4",

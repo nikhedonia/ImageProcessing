@@ -2,46 +2,60 @@ import { useCallback, useMemo, useRef, useState} from 'react';
 import { useDropzone } from 'react-dropzone';
 
 import { Image } from 'image-js';
-import { Breadcrumbs, Button, ButtonProps } from '@mui/material';
+import { Box, Breadcrumbs, Button, ButtonProps } from '@mui/material';
 
-import AddPhotoAlternateIcon from '@mui/icons-material/AddPhotoAlternate';
+
 import UndoIcon from '@mui/icons-material/Undo';
 import CommitIcon from '@mui/icons-material/Commit';
-import { ToolBox } from '@/components/processors/ToolBox';
-import { Histogram } from '@/components/Histogram';
-
-type Operation = {
-  id: number;
-  operation: string;
-  data: any;
-}
-
-type ImageEntry = {
-  type: String, 
-  name: string, 
-  chain: Operation[],
-  image: Image, 
-  thumbnail: Image,
-  next?: {
-    image: Image
-  } & Operation
-}
+import { ImageEntry, Operation } from '@/types';
+import {Menu} from '@/components/Menu'
+import { WorkSpace } from '@/components/WorkSpace';
 
 function Crumb({operation, data, ...props}: Partial<Operation> & ButtonProps) {
   if(!operation) return null;
   return <Button {...props}>{operation}({JSON.stringify(data||{})})</Button>;
 }
 
+// const worker = (() => {
+//   if (typeof(window) !== 'undefined') {
+//     let id = 0;
+//     const worker = new Worker(new URL('../worker.ts', import.meta.url));
+
+//     const jobs = {} as Record<number, (val: unknown)=>void>;
+
+//     worker.addEventListener("message", (result: MessageEvent<{id: number}>) => {
+//       jobs[result.data.id]?.(result.data);
+//     })
+
+//     return async (image: Image, operation: string, options: unknown) => {
+
+//       const blob = image.toBlob();
+        
+//       worker.postMessage({
+//         id,
+//         imageBlob: blob,
+//         operation,
+//         options
+//       });
+
+//       const p = new Promise(done => {jobs[id] = x => {done(x); delete jobs[id]}});
+
+//       ++id;
+
+//       return p;
+//     }
+  
+//   } else {
+//     return async (image: Image, operation: string, options: unknown) => {
+//       // @ts-ignore
+//       return image[operation](options);
+//     }
+//   }
+// })();
+
 function ImageProcessor() {
   const [selected, setSelected] = useState(0);
   const [images, setImages] = useState<ImageEntry[]>([]);
-
-  const [scale, setScale] = useState(1);
-  const [[x,y], setImageXY] = useState([0,0]);
-
-
-  const canvasRef = useRef<HTMLDivElement|null>(null);
-  const [dragStart, setDragStart] = useState<null|[number,number,number,number]>(null);
 
 
   const onDrop = useCallback( async (files: File[]) => {
@@ -96,20 +110,22 @@ function ImageProcessor() {
   }, [selected]);
 
   const workingImage = images[selected]?.next?.image || images[selected]?.image;
-  const dataUrl = useMemo(()=>{
-    return workingImage?.toDataURL()
-  }, [workingImage, images[selected]?.next])
+
+  const {onClick: onAddFiles, ...dropProps} = getRootProps();
 
   return (
-    <div style={{
+    <div 
+      {...dropProps}
+      style={{
       display: 'grid', 
       height:'100vh',
       grid: `
-        [r1-start]  "n    n   n"    2em [r1-end]
-        [r2-start]  "l    c   r"    1fr [r1-end]
-                 /  20em 1fr 20em  
+        [r1-start]  " n   n"    2em [r1-end]
+        [r2-start]  " c   r"    1fr [r1-end]
+                 /   1fr 20em  
       `
     }}>
+       <input {...getInputProps()} />
 
       <div className='topBar' style={{gridArea:'n', display: 'flex', height: '2rem', gap:'0.1em', alignItems: 'center'}}>
         <Button disabled={!images[selected]?.next}           
@@ -171,102 +187,12 @@ function ImageProcessor() {
         </Breadcrumbs>
       </div>
       
-        <div style={{gridArea: 'l', background:'#eee', overflowY: 'scroll'}}>
-          <input {...getInputProps()} />
 
-          <div style={{ width: '15em'}}>
-            {images.map( (x, i)=>
-              <div key={x.name+i} style={{
-                display:'flex', 
-                flexDirection:'column', 
-                padding:'0.5em', 
-                margin: '0.5em', 
-                border:`solid 1px ${i == selected ? 'red' : 'black'}`,
-                justifyContent:'center',
-                alignItems:'center'
-              }}>
-                <img
-                  style={{width:x.type == 'fs' ? '100%' : '90%' }} 
-                  key={x.name} 
-                  src={x.thumbnail.toDataURL()} onClick={()=>{ setSelected(i); } } />
-                <span>{x.name}</span>
-              </div> 
-            )}
-          </div>
-
-          <div {...getRootProps()} style={{marginTop:'2em' }}>
-            <div style={{display:'flex', flexDirection:'column', alignItems: 'center', justifyContent: 'center'}}>
-              <AddPhotoAlternateIcon style={{width:'5rem', height:'5rem'}}/>
-              <span>add Image</span>
-            </div>
-          </div>
-          
-        </div>
-
-        {workingImage && 
-          <div 
-          ref={canvasRef}
-          draggable={false}
-          style={{
-            gridArea:'c',
-            userSelect:'none',
-            display: 'flex', 
-            padding: '1em',
-            background:'#ccc',
-            overflow:'hidden',
-            position: 'relative'
-          }}
-        
-          onMouseDown={e => {
-            if(!canvasRef.current) return;
-            const dx = e.clientX
-            const dy = e.clientY
-            setDragStart([dx, dy, x,y]);
-          }}
-
-          onMouseMove={e => {
-            if (!dragStart || !canvasRef.current) return 
-            
-            const dx = e.clientX - dragStart[0]
-            const dy = e.clientY - dragStart[1]
-          
-            setImageXY([dx+dragStart[2], dy+dragStart[3]]);
-
-          }}
-
-          onMouseUp={()=> setDragStart(null)}
-          onMouseLeave={()=> setDragStart(null)}
-          onClick={()=> setDragStart(null)}
-          onBlur={()=> setDragStart(null)}
-
-          onWheel={e=>{
-            setScale( scale + e.deltaY / 1000.0 )
-          }}
-          >
-            {<img
-              draggable={false}
-
-              style={{
-                userSelect: 'none',
-                transform: `translate(${x}px, ${y}px) scale(${scale})`,
-                objectFit: 'contain'
-              }} 
-              src={dataUrl} /> 
-            }
-          </div>
-        }
+      <WorkSpace image={workingImage}/>
         
 
-      <div style={{gridArea: 'r', display:'flex', flexDirection:'column', gap: '1em', overflowY:'scroll'}}>
-        <h2>Tools</h2>
-
-        <ToolBox key={selected} image={workingImage} onUpdate={(operation, data) => {
-          update(operation, data);
-        }} />
-
-        <div>
-          <Histogram image={workingImage}/>
-        </div>
+      <div style={{gridArea: 'r', display:'flex', flexDirection:'column', overflowY:'auto'}}>
+        <Menu images={images} selected={selected} setSelected={setSelected} update={update} onAddFiles={onAddFiles}/>
       </div>
 
 
