@@ -1,9 +1,18 @@
-// import Image from 'image-js';
+import Image from 'image-js';
+import { WorkerImageAction } from './worker-action';
 
-// onmessage = (e) => {
-//   const {data} = e;
-  
-//   const image = Image.load(data.blob);
 
-//   postMessage(workerResult);
-// };
+onmessage = async ({data}: MessageEvent<WorkerImageAction>) => {
+
+  const image = await Image.load(data.url);
+
+  //@ts-ignore
+  const result = image[data.operation](data.options) as Image;
+
+  const url = await result.toDataURL();
+
+  postMessage({
+    ...data,
+    url
+  });
+};

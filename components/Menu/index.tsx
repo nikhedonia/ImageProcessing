@@ -17,15 +17,17 @@ export type MenuProps = {
   selected: number
   setSelected: (x:number)=>void
   images: ImageEntry[]
+  disabled: boolean;
   update: (op:string, data: any)=>void,
   onAddFiles: MouseEventHandler<HTMLElement> | undefined
 }
 
-export function Menu ({selected, setSelected, images, onAddFiles, update}:MenuProps) {
+export function Menu ({disabled, selected, setSelected, images, onAddFiles, update}:MenuProps) {
   const workingImage = images[selected]?.image;
+  const previewImage = images[selected]?.next?.image || workingImage;
   return (
     <>
-      <Accordion TransitionProps={{ unmountOnExit: true }}>
+      <Accordion>
       <AccordionSummary> 
         <Box style={{display:'flex', alignItems:'center', gap:'0.5em'}}> 
           <InfoIcon /> Info 
@@ -58,9 +60,7 @@ export function Menu ({selected, setSelected, images, onAddFiles, update}:MenuPr
         </Box>
       </AccordionSummary>
       <AccordionDetails>
-        <ToolBox key={selected} image={workingImage} onUpdate={(operation, data) => {
-          update(operation, data);
-        }} />
+        <ToolBox disabled={disabled} key={selected} image={workingImage} onUpdate={update} />
       </AccordionDetails>
     </Accordion>
 
@@ -71,7 +71,7 @@ export function Menu ({selected, setSelected, images, onAddFiles, update}:MenuPr
         </Box>
       </AccordionSummary>
       <AccordionDetails>
-        <Histogram key={selected} image={workingImage} />
+        <Histogram key={selected} image={previewImage} />
       </AccordionDetails>
     </Accordion>
 
@@ -98,7 +98,7 @@ export function Menu ({selected, setSelected, images, onAddFiles, update}:MenuPr
                 <img
                   style={{width:x.type == 'fs' ? '100%' : '90%' }} 
                   key={x.name} 
-                  src={x.thumbnail.toDataURL()} onClick={()=>{ setSelected(i); } } />
+                  src={x.url} onClick={()=>{ setSelected(i); } } />
                 <span>{x.name}</span>
               </div> 
             )}

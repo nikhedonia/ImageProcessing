@@ -18,12 +18,14 @@
     "@types/node": "20.5.1",
     "@types/react": "18.2.20",
     "@types/react-dom": "18.2.7",
+    "canvas-webworker": "^0.0.3",
     "dedent": "^1.5.1",
     "eslint": "8.47.0",
     "eslint-config-next": "13.4.18",
     "image-js": "^0.35.4",
     "image.js": "^0.0.0",
     "next": "13.4.18",
+    "object-hash": "^3.0.0",
     "react": "18.2.0",
     "react-dom": "18.2.0",
     "react-dropdown": "^1.11.0",
@@ -34,6 +36,7 @@
     "typescript": "5.1.6"
   },
   "devDependencies": {
+    "@types/object-hash": "^3.0.3",
     "@types/react-vis": "^1.11.11",
     "gh-pages": "^4.0.0"
   }

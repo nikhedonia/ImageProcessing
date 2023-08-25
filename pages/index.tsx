@@ -10,48 +10,55 @@ import CommitIcon from '@mui/icons-material/Commit';
 import { ImageEntry, Operation } from '@/types';
 import {Menu} from '@/components/Menu'
 import { WorkSpace } from '@/components/WorkSpace';
+import objHash from 'object-hash';
 
 function Crumb({operation, data, ...props}: Partial<Operation> & ButtonProps) {
   if(!operation) return null;
   return <Button {...props}>{operation}({JSON.stringify(data||{})})</Button>;
 }
 
-// const worker = (() => {
-//   if (typeof(window) !== 'undefined') {
-//     let id = 0;
-//     const worker = new Worker(new URL('../worker.ts', import.meta.url));
+const worker = (() => {
+  if (typeof(window) !== 'undefined') {
+    const worker = new Worker(new URL('../worker.ts', import.meta.url));
 
-//     const jobs = {} as Record<number, (val: unknown)=>void>;
+    const jobs = {} as Record<string, (val: string)=>void>;
 
-//     worker.addEventListener("message", (result: MessageEvent<{id: number}>) => {
-//       jobs[result.data.id]?.(result.data);
-//     })
+    worker.addEventListener("message", (result: MessageEvent<{url: string, hash: string}>) => {
+      console.log({result});
+      jobs[result.data.hash]?.(result.data.url);
+    })
 
-//     return async (image: Image, operation: string, options: unknown) => {
+    return async (url: string, operation: string, options: unknown): Promise<string> => {
 
-//       const blob = image.toBlob();
-        
-//       worker.postMessage({
-//         id,
-//         imageBlob: blob,
-//         operation,
-//         options
-//       });
+      const task = {url, operation, options};
+      const hash = objHash(task);
+      
+      console.log({
+        hash,
+        ...task
+      });
 
-//       const p = new Promise(done => {jobs[id] = x => {done(x); delete jobs[id]}});
+      worker.postMessage({
+        hash,
+        ...task
+      });
 
-//       ++id;
+      const p = new Promise<string>(done => {
+        jobs[hash] = (x: string) => {
+          done(x); 
+          delete jobs[hash]
+        }
+      });
 
-//       return p;
-//     }
+      return p;
+    }
   
-//   } else {
-//     return async (image: Image, operation: string, options: unknown) => {
-//       // @ts-ignore
-//       return image[operation](options);
-//     }
-//   }
-// })();
+  } else {
+    return async (url: string, operation: string, options: unknown) => {
+      return "";
+    }
+  }
+})();
 
 function ImageProcessor() {
   const [selected, setSelected] = useState(0);
@@ -59,55 +66,92 @@ function ImageProcessor() {
 
 
   const onDrop = useCallback( async (files: File[]) => {
-    const [file] = files;
-    const image = await Image.load(await file.arrayBuffer());
+    
+    const all = await Promise.allSettled(files.map(async (file) => {
+     // const url = await window.URL.createObjectURL(file);
+
+      const buf = await file.arrayBuffer();
+     
+      const image = await Image.load(buf);
+      const url = image.toDataURL();
+      return {file, url, image};
+    }));
+
+    const imageEntries = Array
+      .from(all.values())
+      .map( (x) => {
+        if(x.status !== 'fulfilled') return null;
+
+        return {
+          type: 'fs',
+          name: x.value.file.name,
+          chain: [{
+            parent: null,
+            id: images.length,
+            operation: 'fs',
+            data: {input: x.value.file.name}
+          }],
+          ...x.value
+        }
+      }).filter(Boolean) as ImageEntry[];
+
     setImages(images => [
       ...images, 
-      {
-        type: 'fs',
-        name: file.name, 
-        chain: [{
-          parent: null,
-          id: images.length,
-          operation: 'fs',
-          data: {input: file.name}
-        }],
-        image, 
-        thumbnail: (image.width > 300) ? image.resize({width:300}) : image
-      }
+      ...imageEntries
     ]);
-  }, []);
+  },[images, selected]);
   
-  const {getRootProps, getInputProps, isDragActive} = useDropzone({onDrop})
+  const {getRootProps, getInputProps, isDragActive} = useDropzone({onDrop});
+
+  const [running, setRunning] = useState(false);
   
 
-  const update = useCallback((operation: string, data: any) => {
-    setImages(images => {
-      console.log({selected});
-      try {
-        // @ts-ignore
-        const image = images[selected]?.image[operation](data);
-        const replaced = {
-          ...images[selected],
-          next: {
-            id: selected,
-            operation,
-            data,
-            image
+  const update = useCallback(async (operation: string, options: unknown) => {
+
+    if (running) return;
+    const entry = images[selected];
+
+    console.log(images, entry, selected);
+    console.log('update', {url: entry.url, operation, options});
+    setRunning(true);
+
+
+    try {
+      const url = await worker(entry.url, operation, options);
+      const image = await Image.load(url);
+      setRunning(false);
+
+      setImages(images => {
+        try {
+          // @ts-ignore
+
+
+          const replaced = {
+            ...entry,
+            next: {
+              url,
+              id: selected,
+              operation,
+              image,
+              data: options
+            }
           }
+    
+          return [
+            ...images.slice(0, selected), 
+            replaced, 
+            ...images.slice(selected+1)
+          ]
+        } catch (e) {
+          console.error(e);
+          return images
         }
-  
-        return [
-          ...images.slice(0, selected), 
-          replaced, 
-          ...images.slice(selected+1)
-        ]
-      } catch (e) {
-        console.error(e);
-        return images
-      }
-    });
-  }, [selected]);
+      });
+  } catch (e) {
+    console.log(e);
+    setRunning(false);
+  }
+  }, [images.length, selected]);
 
   const workingImage = images[selected]?.next?.image || images[selected]?.image;
 
@@ -136,31 +180,32 @@ function ImageProcessor() {
         {/* <Button><RedoIcon/></Button> */}
         <Button 
           disabled={!images[selected]?.next} 
-          onClick={()=>{
+          onClick={async ()=>{
             setImages(images => {
-            const {image, operation, data} = images[selected].next!;
-            delete images[selected].next;
+              const {url, image, operation, data} = images[selected].next!;
+              delete images[selected].next;
 
-            setTimeout(()=>{
-              console.log('updating selection', selected, images.length)
-              setSelected(images.length);
-            })
+              setTimeout(()=>{
+                console.log('updating selection', selected, images.length)
+                setSelected(images.length);
+              })
 
-            return [
-              ...images, {
-                type: 'op',
-                name: operation,
-                chain: [...images[selected].chain, {
-                  parent: selected,
-                  id: images.length,
-                  operation,
-                  data
-                }],
-                image,
-                thumbnail: (image.width > 300) ? image.resize({width:300}) : image
-              }
-            ]
-          })}}>
+              return [
+                ...images, {
+                  url,
+                  type: 'op',
+                  name: operation,
+                  chain: [...images[selected].chain, {
+                    parent: selected,
+                    id: images.length,
+                    operation,
+                    data
+                  }],
+                  image
+                }
+              ]
+            })}}
+          >
             <CommitIcon/>
           </Button>
 
@@ -192,7 +237,14 @@ function ImageProcessor() {
         
 
       <div style={{gridArea: 'r', display:'flex', flexDirection:'column', overflowY:'auto'}}>
-        <Menu images={images} selected={selected} setSelected={setSelected} update={update} onAddFiles={onAddFiles}/>
+        <Menu 
+          disabled={running} 
+          images={images} 
+          selected={selected} 
+          setSelected={setSelected} 
+          update={update} 
+          onAddFiles={onAddFiles}
+        />
       </div>
 
 

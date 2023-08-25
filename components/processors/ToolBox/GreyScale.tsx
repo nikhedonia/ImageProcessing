@@ -1,4 +1,4 @@
-import { Accordion, AccordionDetails, AccordionSummary, Box, Button, Checkbox, FormControlLabel, Slider, Typography } from "@mui/material";
+import { Accordion, AccordionDetails, AccordionSummary, Box, Button } from "@mui/material";
 import { ProcessorProps } from "./ProcessorProps";
 import { GreyAlgorithm } from 'image-js';
 import ContrastIcon from '@mui/icons-material/Contrast';

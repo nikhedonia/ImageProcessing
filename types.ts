@@ -7,12 +7,14 @@ export type Operation = {
 }
 
 export type ImageEntry = {
-  type: String, 
-  name: string, 
+  type: string, 
+  file?: File,
+  name: string,
+  url: string,
   chain: Operation[],
   image: Image, 
-  thumbnail: Image,
   next?: {
+    url: string;
     image: Image
   } & Operation
 }

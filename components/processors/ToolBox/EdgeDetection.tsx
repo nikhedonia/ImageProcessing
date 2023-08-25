@@ -4,7 +4,7 @@ import RadarIcon from '@mui/icons-material/Radar';
 import { useCallback, useRef } from "react";
 import { getValue } from "./getValue";
 
-export function EdgeDetection({image, onUpdate}: ProcessorProps) {
+export function EdgeDetection({disabled, image, onUpdate}: ProcessorProps) {
   const formRef = useRef<HTMLFormElement>(null);
   const onChange = useCallback(() => {
     if (!formRef.current) 
@@ -55,6 +55,17 @@ export function EdgeDetection({image, onUpdate}: ProcessorProps) {
                 Sobel XY
             </MenuItem>
 
+
+            <MenuItem value="schaarFilter-x">
+                Schaar X
+            </MenuItem>
+            <MenuItem value="schaarFilter-y">
+                Schaar Y
+            </MenuItem>
+            <MenuItem value="schaarFilter-xy">
+                Schaar XY
+            </MenuItem>
+
             {/* <MenuItem value="gradientFilter-x">
                 Gradient X
             </MenuItem>
@@ -66,7 +77,7 @@ export function EdgeDetection({image, onUpdate}: ProcessorProps) {
             </MenuItem> */}
           </Select>
 
-          <Button onClick={onChange}>Run</Button>
+          <Button disabled={disabled} onClick={onChange}>Run</Button>
         </form>
       </AccordionDetails>
     </Accordion>

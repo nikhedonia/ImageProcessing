@@ -4,7 +4,7 @@ import DeBlurIcon from '@mui/icons-material/Deblur';
 import { useCallback, useRef } from "react";
 import { getValue } from "./getValue";
 
-export function ErodeDilate({image, onUpdate}: ProcessorProps) {
+export function ErodeDilate({disabled, image, onUpdate}: ProcessorProps) {
   const formRef = useRef<HTMLFormElement>(null);
   const onChange = useCallback(() => {
     if (!formRef.current) 
@@ -58,7 +58,7 @@ export function ErodeDilate({image, onUpdate}: ProcessorProps) {
           </Select>
           <Box display="flex" gap={5}>
             <Typography> Iterations </Typography> 
-            <Slider name="iterations" min={1} max={100} step={1} onChange={onChange} />
+            <Slider disabled={disabled} name="iterations" min={1} max={100} step={1} onChange={onChange} />
           </Box>
         </form>
       </AccordionDetails>

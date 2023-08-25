@@ -4,7 +4,7 @@ import BlurOnIcon from '@mui/icons-material/BlurOn';
 import { useCallback, useRef } from "react";
 import { getValue } from "./getValue";
 
-export function BlurFilter({image, onUpdate}: ProcessorProps) {
+export function BlurFilter({disabled, image, onUpdate}: ProcessorProps) {
   const formRef = useRef<HTMLFormElement>(null);
   const onChange = useCallback(() => {
     if (!formRef.current) 
@@ -41,22 +41,22 @@ export function BlurFilter({image, onUpdate}: ProcessorProps) {
         <form ref={formRef}>
           <Select name="operation" label="operation" defaultValue={"gaussianFilter"}>
             <MenuItem value="medianFilter">
-                Median Filter
+                Median Filter (slow!!)
             </MenuItem>
-            {/* <MenuItem value="blurFilter">
+            {<MenuItem value="blurFilter">
                 Blur Filter (slow!!)
-            </MenuItem> */}
+            </MenuItem>}
             <MenuItem value="gaussianFilter">
                 Gaussian Filter
             </MenuItem>
           </Select>
           <Box display="flex" gap={5}>
             <Typography> Radius </Typography> 
-            <Slider name="radius" min={1} max={100} step={1} onChange={onChange} />
+            <Slider disabled={disabled} name="radius" min={1} max={100} step={1} onChange={onChange} />
           </Box>
           <Box display="flex" gap={5}>
             <Typography> Sigma </Typography> 
-            <Slider name="sigma" min={0.01} max={100} step={0.01} onChange={onChange}  />
+            <Slider disabled={disabled} name="sigma" min={0.01} max={100} step={0.01} onChange={onChange}  />
           </Box>
         </form>
       </AccordionDetails>
