@@ -55,7 +55,7 @@ export function EdgeDetection({disabled, image, onUpdate}: ProcessorProps) {
                 Sobel XY
             </MenuItem>
 
-
+{/*           
             <MenuItem value="schaarFilter-x">
                 Schaar X
             </MenuItem>
@@ -64,7 +64,7 @@ export function EdgeDetection({disabled, image, onUpdate}: ProcessorProps) {
             </MenuItem>
             <MenuItem value="schaarFilter-xy">
                 Schaar XY
-            </MenuItem>
+            </MenuItem> */}
 
             {/* <MenuItem value="gradientFilter-x">
                 Gradient X

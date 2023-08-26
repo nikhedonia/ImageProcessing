@@ -124,8 +124,6 @@ function ImageProcessor() {
       setImages(images => {
         try {
           // @ts-ignore
-
-
           const replaced = {
             ...entry,
             next: {
@@ -237,12 +235,13 @@ function ImageProcessor() {
         
 
       <div style={{gridArea: 'r', display:'flex', flexDirection:'column', overflowY:'auto'}}>
-        <Menu 
+        <Menu
+          key={images.length+' '+selected} 
           disabled={running} 
           images={images} 
           selected={selected} 
           setSelected={setSelected} 
-          update={update} 
+          update={update}
           onAddFiles={onAddFiles}
         />
       </div>
