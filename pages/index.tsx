@@ -2,7 +2,7 @@ import { useCallback, useMemo, useRef, useState} from 'react';
 import { useDropzone } from 'react-dropzone';
 
 import { Image } from 'image-js';
-import { Box, Breadcrumbs, Button, ButtonProps } from '@mui/material';
+import { Box, Breadcrumbs, Button, ButtonProps, Slider } from '@mui/material';
 
 
 import UndoIcon from '@mui/icons-material/Undo';
@@ -11,6 +11,9 @@ import { ImageEntry, Operation } from '@/types';
 import {Menu} from '@/components/Menu'
 import { WorkSpace } from '@/components/WorkSpace';
 import objHash from 'object-hash';
+import {GPU, IKernelRunShortcut, Kernel, KernelOutput, KernelVariable} from 'gpu.js'
+import { avgKernel, dilationControls, erosionKernel, gpu, greyscaleKernel, morphologicalGradientKernel, sobelKernel } from '@/shaders';
+import { Controls } from '@/components/Controls';
 
 function Crumb({operation, data, ...props}: Partial<Operation> & ButtonProps) {
   if(!operation) return null;
@@ -99,6 +102,7 @@ function ImageProcessor() {
       ...images, 
       ...imageEntries
     ]);
+    setSelected(images.length);
   },[images, selected]);
   
   const {getRootProps, getInputProps, isDragActive} = useDropzone({onDrop});
@@ -155,6 +159,68 @@ function ImageProcessor() {
 
   const {onClick: onAddFiles, ...dropProps} = getRootProps();
 
+  const gpuTest = (value: number) => {
+
+
+    function createPipeline(gpu: GPU, kernels: ((g:GPU) => IKernelRunShortcut)[], {width, height}: {width: number, height: number}) {
+
+      const compiled = kernels.map(k => k(gpu));
+      
+      compiled
+        .slice(0,-1)
+        .forEach(k => k
+          .setOutput([width, height])
+          .setPipeline(true)
+        );
+
+        compiled
+          .at(-1)!
+          .setOutput([width, height])
+          .setPipeline(false);
+
+      return (image: HTMLImageElement, args: KernelVariable[][]) => (
+        compiled.reduce((input, k, i) => k(input, ...args[i]),  image as HTMLImageElement | KernelOutput)
+      )
+    }
+
+
+    const url = '/ImageProcessing/ohhglob.png';
+    const image = document.createElement('img');
+
+    image.src = url;
+    image.onload = () => {
+
+      const kernel = createPipeline(gpu, [
+      //  avgKernel,
+        greyscaleKernel,
+        morphologicalGradientKernel,
+        
+        //morphologicalGradientKernel,
+      //  greyscaleKernel,
+      ], image);
+
+      const c = value/100;
+
+      const result = kernel(image, [
+       // [3],
+        [[0.0, 0.0, 0.0, 0.0, 0.5, 0.5, 0.0, 0.0]],
+        [3, c],
+        //[3, 1-c],
+        // [1.0],
+        // [[1.0,1.0,1.0, 0.0, 0.0, 0.0, 0.0]],
+        // [[c, 1.0-c]]
+      ])
+      const png = gpu.canvas.toDataURL();
+
+      Object.assign(document.querySelector('#gpu')!, {src:png});
+    }
+
+
+
+    
+
+  }
+
   return (
     <div 
       {...dropProps}
@@ -167,7 +233,7 @@ function ImageProcessor() {
                  /   1fr 20em  
       `
     }}>
-       <input {...getInputProps()} />
+      <input {...getInputProps()} />
 
       <div className='topBar' style={{gridArea:'n', display: 'flex', height: '2rem', gap:'0.1em', alignItems: 'center'}}>
         <Button disabled={!images[selected]?.next}           
@@ -247,6 +313,8 @@ function ImageProcessor() {
       </div>
 
 
+      <Controls {...dilationControls} />
+      <img id="gpu" />
     </div>
   )
 }
