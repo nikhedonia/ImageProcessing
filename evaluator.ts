@@ -220,7 +220,7 @@ export async function canvasToUrl(canvas: OffscreenCanvas, {width = 0, height = 
       width, height 
     );
 
-    return await URL.createObjectURL(await canvas.convertToBlob());
+    return await URL.createObjectURL(await tmpCanvas.convertToBlob());
   }
 }
 
@@ -317,30 +317,11 @@ export class Evaluator {
     onResult('input', i, jobs.length, inputImages);
 
     for await (const {pipeline: p, result} of  run(jobs, htmlImageMap)) {
-      if (typeof result === 'string') {
-        outputImages[p.outputId] = {
-          type: 'output',
-          pipelineId: p.pipelineId,
-          name: p.outputId,
-          url: result
-        }
-
-      } else {
-
-        const src = await URL.createObjectURL(await p.gpu.canvas.convertToBlob());
-
-        p.assets[p.outputId] = {
-          type: 'output',
-          src
-        };
-
-        const x = {
-          type: 'output',
-          pipelineId: p.pipelineId,
-          name: p.outputId,
-          url: src
-        }
-        outputImages[x.name] = x;
+      outputImages[p.outputId] = {
+        type: 'output',
+        pipelineId: p.pipelineId,
+        name: p.outputId,
+        url: result
       }
       onResult('progress', i++ , jobs.length, {...inputImages, ...outputImages});
     }
