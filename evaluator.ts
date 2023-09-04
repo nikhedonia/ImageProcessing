@@ -115,6 +115,12 @@ export function instantiatePipeline(gpu: GPU) {
   }
 }
 
+type ImageInfo = {
+  width: number,
+  height: number,
+  src: string
+}
+
 type PipelineStateEntry = {
   gpu: GPU,
   pipelineId: string,
@@ -125,8 +131,8 @@ type PipelineStateEntry = {
   deps: FileInput[],
   assets: Record<string, {
     type: 'output',
-    src: string
-  }>
+    inputImages: ImageInfo[]
+  } & ImageInfo>
 }
 
 
@@ -203,7 +209,9 @@ export function evaluator(ops: Operation[], state: PipelineState = {}) {
 
 export async function canvasToUrl(canvas: OffscreenCanvas, {width = 0, height = 0}) {
   if (canvas.width === width && canvas.height === height) {
-    return await URL.createObjectURL(await canvas.convertToBlob())
+    return canvas
+      .convertToBlob()
+      .then(URL.createObjectURL)
   } else {
     // WORKAROUND: gpu.js prevents canvases to resize
     // this results in a bigger image with garbage artefacts
@@ -220,7 +228,9 @@ export async function canvasToUrl(canvas: OffscreenCanvas, {width = 0, height = 
       width, height 
     );
 
-    return await URL.createObjectURL(await tmpCanvas.convertToBlob());
+    return tmpCanvas
+      .convertToBlob()
+      .then(URL.createObjectURL)
   }
 }
 
@@ -229,10 +239,8 @@ export async function* run(jobs: PipelineStateEntry[], inputImages: Record<strin
   for (const p of jobs) {
     const args = p.inputs.map( (x) => Api[x.operation](x.args as any));
     if ( p.assets[p.outputId] ) {
-      yield {
-        pipeline: p, 
-        result: p.assets[p.outputId].src
-      };
+      yield {pipeline: p, result: p.assets[p.outputId]};
+      continue;
     }
 
     const images = p.deps.map(x => inputImages[x.args.path]);
@@ -245,14 +253,14 @@ export async function* run(jobs: PipelineStateEntry[], inputImages: Record<strin
 
 
     p.assets[p.outputId] = {
-      type: 'output', 
+      type: 'output',
+      inputImages: images,
+      width: images[0].width,
+      height: images[0].height,
       src
     }
 
-    yield {
-      pipeline: p, 
-      result: src
-    };
+    yield {pipeline: p, result: p.assets[p.outputId]};
   }
 
 }
@@ -290,6 +298,7 @@ export class Evaluator {
           p.deps.map(x => ({
             type: 'input',
             pipelineId: p.pipelineId,
+            outputId: p.outputId,
             name: x.args.path,
             width: htmlImageMap[x.args.path].width,
             height: htmlImageMap[x.args.path].height,
@@ -299,7 +308,10 @@ export class Evaluator {
     );
   }
 
-  public async run(htmlImageMap: Record<string, HTMLImageElement> = {}, onResult = (stage: string, i: number, steps: number ,images: Record<string, EvaluatorResult>)=>{}) { 
+  public async run(
+    htmlImageMap: Record<string, HTMLImageElement> = {},
+    onResult = (stage: string, i: number, steps: number ,images: Record<string, EvaluatorResult>)=>{}
+  ) { 
     if (!this.currentJobSpecs)
       return;
     
@@ -318,10 +330,10 @@ export class Evaluator {
 
     for await (const {pipeline: p, result} of  run(jobs, htmlImageMap)) {
       outputImages[p.outputId] = {
-        type: 'output',
         pipelineId: p.pipelineId,
         name: p.outputId,
-        url: result
+        ...result,
+        url: result.src
       }
       onResult('progress', i++ , jobs.length, {...inputImages, ...outputImages});
     }

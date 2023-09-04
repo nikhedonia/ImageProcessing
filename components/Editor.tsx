@@ -12,6 +12,7 @@ import { Box, Slider } from "@mui/material";
 import {debounce} from 'lodash'
 import objectHash from "object-hash";
 import { ImageEntry } from "@/types";
+import { uiCompletions } from "@/processors/completions";
 
 
 const defaultText= dedent`
@@ -75,10 +76,10 @@ export function Editor({images}: EditorProps) {
       return
 
     await evaluator.run(imageMap, (status, _1,_2, processed) => {
-      if (status != 'complete' ) {
-        setWorkingImages(images => ({...images, ...processed}))
-      } else {
+      if (status === 'complete' ) {
         setWorkingImages(processed);
+      } else {
+        setWorkingImages(images => ({...images, ...processed}))
       }
     });
 
@@ -97,20 +98,15 @@ export function Editor({images}: EditorProps) {
 
           editor.completers.push({
             getCompletions: (editor, session, pos, prefix, callback) => {
-              callback(null, [{
-                caption: 'dilate', 
-                value: 'dilate({radius: 1})', 
-                meta: `dilate({radius: 1}) \n  radius is \n cool`
-              }, {
-                caption: 'erode', 
-                value: 'erode({radius: 1})',
-                score: 1000,
-                meta: `erode({radius: 1}) \n  radius is \n cool`,
-                docHTML: `
-                  <h1> Erosion </h1>
-                  <p onClick="console.log('blub')"> radius is <b>cool</b> </p>
-                `
-              }])
+              callback(null, [
+                ...uiCompletions,
+                ...images.map(x => ({
+                  caption: `image("${x.name}")`, 
+                  score: 1000,
+                  value: `image("${x.name}")`,
+                  meta: `image("${x.name}")`,
+                }))
+              ])
           }})
         }}
         mode="typescript"
@@ -163,23 +159,11 @@ export function Editor({images}: EditorProps) {
     )}
 
 
-    <h3> Inputs </h3>
-    {Object
-      .values(workingImages)
-      .filter(x=> x.type =='input')
-      .map( x=> 
-        <Box  key={x.url}>
-          <img src={x.url} />
-          <div>{x.name}</div>
-          <div>{x.pipelineId}</div>
-        </Box>  
-      )}
-
     <h3> Outputs </h3>
     {Object
       .values(workingImages)
       .filter(x=> x.type =='output')
-      .map( x=>
+      .map( x =>
         <Box  key={x.url}>
           <img src={x.url} />
           <div>{x.name}</div>
