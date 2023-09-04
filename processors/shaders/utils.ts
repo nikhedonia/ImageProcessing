@@ -13,39 +13,18 @@ export function configPipeline(kernels: IKernelRunShortcut[], {width, height} = 
   kernels
     .slice(0,-1)
     .forEach(k => k
+      .setDynamicOutput(true)
       .setOutput([width, height])
       .setPipeline(true)
     );
 
-    kernels
-      .at(-1)!
-      .setOutput([width, height])
-      .setPipeline(false);
+  kernels
+    .at(-1)!
+    .setDynamicOutput(true)
+    .setOutput([width, height])
+    .setPipeline(false);
 
-    return kernels;
-}
-
-export function createPipeline(gpu: GPU, kernels: ((g:GPU) => IKernelRunShortcut)[]) {
-  const compiled = kernels.map(k => k(gpu));
-
-
-  configPipeline(compiled, {width:0, height:0});
-
-  let w = 0;
-  let h = 0;
-  
-  
-
-  return (image: HTMLImageElement, args: KernelVariable[][]) => {
-    
-    if (w != image.width || h != image.height) {
-      w = image.width;
-      h = image.height;
-      configPipeline(compiled, image);
-    }
-    
-    compiled.reduce((input, k, i) => k(input, ...args[i]),  image as HTMLImageElement | KernelOutput)
-  }
+  return kernels;
 }
 
 export function runPipeline(kernels: IKernelRunShortcut[], input: HTMLImageElement[], args: KernelVariable[][]) {

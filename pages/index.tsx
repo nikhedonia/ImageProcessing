@@ -41,8 +41,7 @@ function ImageProcessor() {
     const all = await Promise.allSettled(files.map(async (file) => {
 
       const buf = await file.arrayBuffer();
-
-     
+      
       const image = await ImageJs.load(buf);
       const url = image.toDataURL();
       console.log({url, buf, image});
@@ -74,7 +73,7 @@ function ImageProcessor() {
     <div style={{
       display: 'flex',
       height: '100vh'
-    }}>
+    }} {...dropProps}>
       <input {...getInputProps()}/>
       <Menu images={images}/>
       <Editor images={images}/>

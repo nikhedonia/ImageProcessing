@@ -6,7 +6,7 @@ import "ace-builds/src-noconflict/ext-language_tools";
 
 import dedent from "dedent";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { UIState, evalSpec, evaluator, run } from "@/evaluator";
+import { Evaluator, EvaluatorResult, UIState, evalSpec, evaluator, run } from "@/evaluator";
 import { GPU } from "gpu.js";
 import { Box, Slider } from "@mui/material";
 import {debounce} from 'lodash'
@@ -42,97 +42,49 @@ type EditorProps = {
 
 let g = {};
 
+
 export function Editor({images}: EditorProps) {
   const editorRef = useRef<AceEditor>(null);
+  const imageMap = useMemo(()=>Object.fromEntries(images.map(x=> [x.name, x.element])), [images]);
+
   const [ui, setUI] = useState<UIState>({});
   const [text, setText] = useState("");
-  const compiledSpec = useMemo(()=>evalSpec(text, ui), [text, objectHash(ui)]);
   const [error, setError] = useState<null|string>(null);
-  const [workingImages, setWorkingImages] = useState<Record<string, {type: string, pipelineId: string, name: string, url: string}>>({});
 
-  const debouncedSetUI = useMemo(() => debounce(setUI, 500), []);
-  const runSpec = useMemo(()=>debounce(async (spec: typeof compiledSpec) => {
-    if (!spec) return;
-    const start = +new Date();
-    try {
-      const {ops, uiOps, error} = spec; 
-      setError(error as string);
-      if(error || !ops || !uiOps) {
-        console.log({error});
-        return;
-      }
-      debouncedSetUI(uiOps);
-      
-      if (ops) {
-        const pipelines = evaluator(ops, g);
-        g = pipelines;
-        const htmlImageMap = Object.fromEntries(images.map(x => [x.name, x.element]))
-
-        const inputImages = Object.fromEntries(
-          Object
-            .values(pipelines)
-            .flatMap(p => 
-              p.deps.map(x => ({
-                type: 'input',
-                pipelineId: p.pipelineId,
-                name: x.args.path,
-                url: htmlImageMap[x.args.path].src
-              }))
-            ).map(x=> [x.name, x])
-        );
-
-        setWorkingImages(images => ({...images, ...inputImages}));
-
-        const outputImages = Object.fromEntries(await Promise.all(
-          run(pipelines, htmlImageMap)
-            .map( async ({pipeline: p, result}) => {
-              if (typeof result === 'string') {
-                console.log('using asset from cache');
-                return {
-                  type: 'output',
-                  pipelineId: p.pipelineId,
-                  name: p.outputId,
-                  url: result
-                }
-              }
-
-              console.log('re-running', p);
-              const src = await URL.createObjectURL(await p.gpu.canvas.convertToBlob());
-              p.assets[p.outputId] = {
-                type: 'output',
-                src
-              };
-
-              return {
-                type: 'output',
-                pipelineId: p.pipelineId,
-                name: p.outputId,
-                url: src
-              }
-            }).map( p => p.then(x  => {
-              setWorkingImages(images => ({...images, [x.name]: x}));
-              return [x.name, x];
-            }))
-          ))
-
-        setWorkingImages({
-          ...inputImages, 
-          ...outputImages
-        });
+  const [workingImages, setWorkingImages] = useState<Record<string, EvaluatorResult>>({});
 
 
+  const evaluator = useMemo(()=> new Evaluator(), []);
+  const debouncedSetUI = useMemo(() => debounce(setUI, 200), []);
 
-      }
 
-    } catch (e) {
-      console.log(e);
+  console.log({ui});
+
+  const runSpec = useMemo(() => debounce(async (text, ui) => {
+    evaluator.digest(text, ui);
+    setError(evaluator.error as string);
+
+    
+    if( objectHash(evaluator.currentJobSpecs?.uiOps||{}) !== objectHash(ui) ) {
+      console.log('updating ui');
+      debouncedSetUI(evaluator.currentJobSpecs?.uiOps!);
     }
-  }, 300),[ui]);
+    
 
-  useEffect(()=>{
-    runSpec(compiledSpec);
-  }, [compiledSpec, text]);
+    if (!evaluator.currentJobSpecs?.ops)
+      return
 
+    await evaluator.run(imageMap, (status, _1,_2, processed) => {
+      if (status != 'complete' ) {
+        setWorkingImages(images => ({...images, ...processed}))
+      } else {
+        setWorkingImages(processed);
+      }
+    });
+
+  }, 300), [imageMap, setWorkingImages]);
+
+  useEffect(() => {runSpec(text, ui)}, [text, ui])
 
   return (
     <Box >
@@ -166,6 +118,7 @@ export function Editor({images}: EditorProps) {
         theme="monokai"
         onChange={(text: string) => {
           setText(text);
+          runSpec(text, ui);
         }}
         name="UNIQUE_ID_OF_DIV"
         editorProps={{ $blockScrolling: true }}
@@ -184,13 +137,15 @@ export function Editor({images}: EditorProps) {
           <Box key={x.name + x.defaultValue}>
             <span><b>{x.name}</b> - {x.value}</span>
             <Slider {...x} value={undefined} marks onChange={(_, value: number | number[])=>{
-              setUI({
+              
+              debouncedSetUI(ui => ({
                 ...ui,
                 [x.name]: {
                   ...ui[x.name],
                   value: value as number
                 }
-              });
+              }));
+              
             }} />
           </Box>
         ))

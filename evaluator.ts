@@ -84,7 +84,7 @@ export function evalSpec(text: string, uiState: UIState = {}) {
         const op = {
           operation: 'transform',
           input,
-          pipelineId: objectHash(pipeline),
+          pipelineId: objectHash(pipeline.map(x => x.operation)),
           pipeline: [input, ...pipeline] as unknown as Operation[],
           outputId: objectHash({input, pipeline}),
         } as Transform
@@ -115,7 +115,7 @@ export function instantiatePipeline(gpu: GPU) {
   }
 }
 
-type PipelineState = Record<string, {
+type PipelineStateEntry = {
   gpu: GPU,
   pipelineId: string,
   outputId: string,
@@ -127,12 +127,15 @@ type PipelineState = Record<string, {
     type: 'output',
     src: string
   }>
-}>
+}
+
+
+type PipelineState = Record<string, PipelineStateEntry>
 
 export function evaluator(ops: Operation[], state: PipelineState = {}) {
   const pipelines = ops.filter(x => x.operation == 'transform') as Transform[]
 
-  pipelines.map(p => {
+  const jobs = pipelines.map(p => {
 
     const data = {   
       assets:  state[p.pipelineId]?.assets || {},
@@ -166,11 +169,13 @@ export function evaluator(ops: Operation[], state: PipelineState = {}) {
       }
     }
 
-    return state[p.pipelineId];
-    
+    return {
+      ...state[p.pipelineId],
+      ...data
+    };
   });
 
-  const activePipelines = new Set(pipelines.map(p => p.pipelineId));
+  const activePipelines = new Set(jobs.map(p => p.pipelineId));
 
   Object.entries(state).forEach(([k, s]) => {
     if (!activePipelines.has(k)) {
@@ -190,30 +195,161 @@ export function evaluator(ops: Operation[], state: PipelineState = {}) {
 
       delete state[k];
     }
-  })
+  });
 
-  return state;
+  return {jobs, state};
 }
 
-export function run(state: PipelineState, inputImages: Record<string, HTMLImageElement>) {
-  return Object
-    .entries(state)
-    .filter(x => x[1].dirty)
-    .map( ([k, p]) => {
-      const args = p.inputs.map( (x) => Api[x.operation](x.args as any));
-      if ( p.assets[p.outputId] ) {
-        return {
-          pipeline: p, 
-          result: p.assets[p.outputId].src
-        };
-      }
 
-      const images = p.deps.map(x => inputImages[x.args.path]);
+export async function canvasToUrl(canvas: OffscreenCanvas, {width = 0, height = 0}) {
+  if (canvas.width === width && canvas.height === height) {
+    return await URL.createObjectURL(await canvas.convertToBlob())
+  } else {
+    // WORKAROUND: gpu.js prevents canvases to resize
+    // this results in a bigger image with garbage artefacts
+    // we are cropping the image by copying it into a smaller canvas
+    // the latest image is on the bottom left of in the old canvas
+    const tmpCanvas = new OffscreenCanvas(width, height);
+    const ctx = tmpCanvas.getContext('2d');
 
-      const result = runPipeline(p.steps, images, args);
-      return {
-        pipeline:p, 
-        result
+    ctx?.drawImage(canvas,
+      0,
+      canvas.height - height, 
+      width, height,
+      0,0, 
+      width, height 
+    );
+
+    return await URL.createObjectURL(await canvas.convertToBlob());
+  }
+}
+
+export async function* run(jobs: PipelineStateEntry[], inputImages: Record<string, HTMLImageElement>) {
+
+  for (const p of jobs) {
+    const args = p.inputs.map( (x) => Api[x.operation](x.args as any));
+    if ( p.assets[p.outputId] ) {
+      yield {
+        pipeline: p, 
+        result: p.assets[p.outputId].src
       };
-    })
+    }
+
+    const images = p.deps.map(x => inputImages[x.args.path]);
+
+
+    await new Promise(done => window.requestAnimationFrame(done));
+    runPipeline(p.steps, images, args);
+
+    const src = await canvasToUrl(p.gpu.canvas, images[0]);
+
+
+    p.assets[p.outputId] = {
+      type: 'output', 
+      src
+    }
+
+    yield {
+      pipeline: p, 
+      result: src
+    };
+  }
+
+}
+
+export type JobSpecs = {
+  ops: Operation[];
+  uiOps: UIState;
+} | null
+
+export type EvaluatorResult = {
+  type: string, 
+  pipelineId: string, 
+  name: string, 
+  url: string
+}
+
+export class Evaluator {
+  public state = {}
+  public currentJobSpecs: JobSpecs = null;
+  public error: unknown = null;
+
+  public digest<T extends UIState>(text: string, api?: T) {
+    const specs = evalSpec(text, api);
+    this.error = specs.error;
+    if (specs.ops && specs.uiOps) {
+      this.currentJobSpecs = specs;
+    } 
+    return specs;
+  }
+
+  private getInputImages(htmlImageMap: Record<string, HTMLImageElement>, jobs: PipelineStateEntry[]) {
+    return Object.fromEntries(
+      jobs
+        .flatMap(p => 
+          p.deps.map(x => ({
+            type: 'input',
+            pipelineId: p.pipelineId,
+            name: x.args.path,
+            width: htmlImageMap[x.args.path].width,
+            height: htmlImageMap[x.args.path].height,
+            url: htmlImageMap[x.args.path].src
+          }))
+        ).map(x=> [x.name, x])
+    );
+  }
+
+  public async run(htmlImageMap: Record<string, HTMLImageElement> = {}, onResult = (stage: string, i: number, steps: number ,images: Record<string, EvaluatorResult>)=>{}) { 
+    if (!this.currentJobSpecs)
+      return;
+    
+    const {jobs, state} = evaluator(
+      this.currentJobSpecs?.ops, 
+      this.state
+    );
+
+    this.state = state;
+
+    const inputImages = this.getInputImages(htmlImageMap, jobs);
+    const outputImages : Record<string, EvaluatorResult> = {};
+
+    let i = 0;
+    onResult('input', i, jobs.length, inputImages);
+
+    for await (const {pipeline: p, result} of  run(jobs, htmlImageMap)) {
+      if (typeof result === 'string') {
+        outputImages[p.outputId] = {
+          type: 'output',
+          pipelineId: p.pipelineId,
+          name: p.outputId,
+          url: result
+        }
+
+      } else {
+
+        const src = await URL.createObjectURL(await p.gpu.canvas.convertToBlob());
+
+        p.assets[p.outputId] = {
+          type: 'output',
+          src
+        };
+
+        const x = {
+          type: 'output',
+          pipelineId: p.pipelineId,
+          name: p.outputId,
+          url: src
+        }
+        outputImages[x.name] = x;
+      }
+      onResult('progress', i++ , jobs.length, {...inputImages, ...outputImages});
+    }
+
+    onResult('complete', i, jobs.length, {
+      ...inputImages, 
+      ...outputImages
+    });
+
+  }
+
 }
