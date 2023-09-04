@@ -48,9 +48,7 @@ export function createPipeline(gpu: GPU, kernels: ((g:GPU) => IKernelRunShortcut
   }
 }
 
-export function runPipeline(kernels: IKernelRunShortcut[], input: HTMLImageElement, args: KernelVariable[][]) {
-
-  console.log(input);
-  configPipeline(kernels, input);
-  return kernels.reduce((input, k, i) => k(input, ...args[i]),  input as HTMLImageElement | KernelOutput)
+export function runPipeline(kernels: IKernelRunShortcut[], input: HTMLImageElement[], args: KernelVariable[][]) {
+  configPipeline(kernels, input[0]);
+  return kernels.reduce((input, k, i) => k(input, ...args[i]),  input[0] as HTMLImageElement | KernelOutput)
 }

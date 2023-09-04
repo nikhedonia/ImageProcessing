@@ -11,5 +11,5 @@ export type ImageEntry = {
   file?: File,
   name: string,
   url: string,
-  image: Image, 
+  element: HTMLImageElement, 
 }

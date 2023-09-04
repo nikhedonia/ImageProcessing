@@ -2,6 +2,7 @@ import { GPU, IKernelRunShortcut } from "gpu.js";
 import objectHash from "object-hash";
 import {Shaders, Api} from "@/processors"
 import { configPipeline, runPipeline } from "./processors/shaders/utils";
+import { ImageEntry } from "./types";
 
 export type FileInput = {
   operation: 'fs',
@@ -83,7 +84,7 @@ export function evalSpec(text: string, uiState: UIState = {}) {
         const op = {
           operation: 'transform',
           input,
-          pipelineId: objectHash(pipeline.map(x=>x.operation)),
+          pipelineId: objectHash(pipeline),
           pipeline: [input, ...pipeline] as unknown as Operation[],
           outputId: objectHash({input, pipeline}),
         } as Transform
@@ -120,24 +121,38 @@ type PipelineState = Record<string, {
   outputId: string,
   steps: GPUPipelineStep[],
   inputs: Step[],
-  dirty: boolean
+  dirty: boolean,
+  deps: FileInput[],
+  assets: Record<string, {
+    type: 'output',
+    src: string
+  }>
 }>
 
 export function evaluator(ops: Operation[], state: PipelineState = {}) {
   const pipelines = ops.filter(x => x.operation == 'transform') as Transform[]
 
   pipelines.map(p => {
+
+    const data = {   
+      assets:  state[p.pipelineId]?.assets || {},
+      pipelineId: p.pipelineId,
+      outputId: p.outputId,
+      dirty: p.outputId != state[p.pipelineId]?.outputId, 
+      deps: p
+        .pipeline
+        .filter(x => (x.operation === 'fs')) as FileInput[],
+      inputs: p
+        .pipeline
+        .filter(x => x.operation in Shaders) as Step[],
+    }
+
     if (!state[p.pipelineId]) {
       const canvas = new OffscreenCanvas(0, 0);
       const gpu = new GPU({canvas});
       state[p.pipelineId] = {
         gpu,
-        dirty: true,
-        pipelineId: p.pipelineId,
-        outputId: p.outputId,
-        inputs: p
-          .pipeline
-          .filter(x => x.operation in Shaders) as Step[],
+        ...data,
         steps: configPipeline(
           p
             .pipeline
@@ -147,11 +162,7 @@ export function evaluator(ops: Operation[], state: PipelineState = {}) {
     } else {
       state[p.pipelineId] = {
         ...state[p.pipelineId],
-        dirty: p.outputId != state[p.pipelineId].outputId,
-        outputId: p.outputId,
-        inputs: p
-          .pipeline
-          .filter(x => x.operation in Api) as Step[],
+        ...data
       }
     }
 
@@ -162,9 +173,21 @@ export function evaluator(ops: Operation[], state: PipelineState = {}) {
   const activePipelines = new Set(pipelines.map(p => p.pipelineId));
 
   Object.entries(state).forEach(([k, s]) => {
-    if(!activePipelines.has(k)) {
+    if (!activePipelines.has(k)) {
       console.log('destroying', k);
+
+      try {
+        Object
+          .values(s.assets)
+          .filter(x => x.type === 'output' )
+          .map(x => {
+            console.log('destroying', k);
+            URL.revokeObjectURL(x.src)
+          });
+        } catch (_) {}
+
       s.gpu.destroy();
+
       delete state[k];
     }
   })
@@ -172,13 +195,25 @@ export function evaluator(ops: Operation[], state: PipelineState = {}) {
   return state;
 }
 
-export function run(state: PipelineState) {
+export function run(state: PipelineState, inputImages: Record<string, HTMLImageElement>) {
   return Object
     .entries(state)
     .filter(x => x[1].dirty)
     .map( ([k, p]) => {
-      const inputs = p.inputs.map( (x) => Api[x.operation](x.args as any));
-      const result = runPipeline(p.steps, document.querySelector("#input")! as HTMLImageElement, inputs);
-      return {pipeline:p, result};
+      const args = p.inputs.map( (x) => Api[x.operation](x.args as any));
+      if ( p.assets[p.outputId] ) {
+        return {
+          pipeline: p, 
+          result: p.assets[p.outputId].src
+        };
+      }
+
+      const images = p.deps.map(x => inputImages[x.args.path]);
+
+      const result = runPipeline(p.steps, images, args);
+      return {
+        pipeline:p, 
+        result
+      };
     })
 }
