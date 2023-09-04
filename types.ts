@@ -11,10 +11,5 @@ export type ImageEntry = {
   file?: File,
   name: string,
   url: string,
-  chain: Operation[],
   image: Image, 
-  next?: {
-    url: string;
-    image: Image
-  } & Operation
 }
